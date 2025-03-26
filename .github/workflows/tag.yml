@@ -6,6 +6,7 @@ on:
       - main
 
 permissions:
+  # Allow to git push
   contents: write
 
 jobs:
@@ -16,12 +17,37 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Determine previous tag
+        id: prev_tag
+        run: |
+          git fetch --tags
+          prev_tag=$(git describe --tags `git rev-list --tags --max-count=1`)
+          echo "prev_tag=$prev_tag" >> $GITHUB_ENV
+
+      - name: Get commit messages
+        id: commit_messages
+        run: |
+          commits=$(git log ${{ env.prev_tag }}..HEAD --pretty=format:"%s")
+          echo "commits=$commits" >> $GITHUB_ENV
+
       - name: Determine next version
         id: next_version
         run: |
-          git fetch --tags
-          latest_tag=$(git describe --tags `git rev-list --tags --max-count=1`)
-          next_version=$(echo $latest_tag | awk -F. -v OFS=. '{$NF++;print}')
+          latest_tag=${{ env.prev_tag }}
+          major=$(echo $latest_tag | cut -d. -f1 | cut -dv -f2)
+          minor=$(echo $latest_tag | cut -d. -f2)
+          patch=$(echo $latest_tag | cut -d. -f3)
+          if echo "${{ env.commits }}" | grep -q "feat:"; then
+            major=$((major + 1))
+            minor=0
+            patch=0
+          elif echo "${{ env.commits }}" | grep -q "fix:"; then
+            minor=$((minor + 1))
+            patch=0
+          else
+            patch=$((patch + 1))
+          fi
+          next_version="v$major.$minor.$patch"
           echo "next_version=$next_version" >> $GITHUB_ENV
 
       - name: Create a new tag
